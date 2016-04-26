@@ -13,5 +13,5 @@ type AppList struct {
 
 // AppListResponse is a wrapper because steam doesn't know how to API...
 type AppListResponse struct {
-	AppList AppList `json:"applist"`
+	AppList *AppList `json:"applist"`
 }

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/bkcsoft/steam-fetcher/steam"
 )
 
 const (
@@ -36,7 +38,8 @@ func main() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/search", Search)
 
-	host := fmt.Sprintf(`localhost:%d`, HTTPPort)
+	host := fmt.Sprintf(`127.0.0.1:%d`, HTTPPort)
+	log.Println("Serving on ", host)
 	log.Fatal(http.ListenAndServe(host, router))
 }
 
@@ -64,6 +67,14 @@ func fetchSteamData(r *http.Request) bool {
 func Search(w http.ResponseWriter, r *http.Request) {
 	// We always wanna return json-data...
 	w.Header().Set("content-type", "application/json; charset: utf-8")
+	err := r.ParseForm()
+	if err != nil {
+		log.Println("Failed to ParseForm:", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "An error occured while fetching data form steam, please inform the server-admin..."}`)
+		return
+	}
+	vars := r.Form
 	file, err := os.Stat(TempFile)
 	if err != nil {
 		log.Print("steam-apps.json not found, fetching...")
@@ -90,5 +101,26 @@ func Search(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, `{"apps": []}`)
+
+	al, err := steam.NewFromFile(TempFile)
+	if err != nil {
+		log.Printf("Can't read stream-apps from file... %s\n", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "An error occured while fetching data form steam, please inform the server-admin..."}`)
+		return
+	}
+	if val, ok := vars[`name`]; ok && len(val) > 0 {
+		log.Printf("Searching for %s...", val)
+		al = al.Search(val[0])
+	} else {
+		log.Println(vars)
+	}
+	bytes, err := al.ToJSON()
+	if err != nil {
+		log.Printf("Can't convert app-list to json... %s\n", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "An error occured while fetching data form steam, please inform the server-admin..."}`)
+		return
+	}
+	fmt.Fprintf(w, "%s\n", bytes)
 }
